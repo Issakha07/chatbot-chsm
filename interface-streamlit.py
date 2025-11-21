@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-IT Support Chatbot - Frontend Streamlit Amélioré
+IT Support Chatbot - Frontend Streamlit
 Interface moderne avec historique conversationnel
+Powered by Groq + ChromaDB
 """
 
 import streamlit as st
@@ -250,7 +251,6 @@ def send_message(question: str) -> dict:
             
             if response.status_code == 200:
                 data = response.json()
-                # Sauvegarder session_id pour continuité
                 st.session_state.session_id = data.get("session_id")
                 return data
             
@@ -258,15 +258,6 @@ def send_message(question: str) -> dict:
                 error = response.json().get("detail", "Trop de requêtes")
                 st.error(f"⚠️ {error}")
                 return None
-            
-            elif response.status_code == 503:
-                if attempt < max_retries - 1:
-                    st.warning(f"⏳ Service occupé, nouvelle tentative ({attempt+2}/{max_retries})...")
-                    time.sleep(2)
-                    continue
-                else:
-                    st.error("❌ Service Azure temporairement indisponible. Réessayez dans 30s.")
-                    return None
             
             else:
                 error = response.json().get("detail", "Erreur inconnue")
@@ -279,7 +270,7 @@ def send_message(question: str) -> dict:
                 time.sleep(1)
                 continue
             else:
-                st.error("⏱️ La requête a expiré. Le service met trop de temps à répondre.")
+                st.error("⏱️ La requête a expiré.")
                 return None
         
         except requests.exceptions.ConnectionError:
@@ -379,7 +370,7 @@ with st.sidebar:
     <div class="info-box">
     <strong>✨ Fonctionnalités:</strong><br>
     • 🌐 Bilingue FR/EN<br>
-    • 📚 Base Azure Search<br>
+    • 📚 Base locale ChromaDB<br>
     • 💬 Historique contextuel<br>
     • 🔒 Sessions sécurisées
     </div>
@@ -405,7 +396,7 @@ with st.sidebar:
     
     # Version
     st.markdown("---")
-    st.caption("Version 2.0.0 | Propulsé par Azure OpenAI")
+    st.caption("Version 3.0.0 | Propulsé par Groq + ChromaDB")
 
 # --- ZONE MESSAGES ---
 st.markdown("### 💬 Conversation")
@@ -499,6 +490,6 @@ st.divider()
 st.markdown("""
 <div style="text-align: center; color: #888; font-size: 0.9rem; padding: 1rem 0;">
     <p>🔒 <strong>Confidentialité:</strong> Vos conversations sont temporaires et sécurisées</p>
-    <p>Développé avec ❤️ pour l'hôpital • Propulsé par Azure OpenAI GPT-4o</p>
+    <p>Développé avec ❤️ pour l'hôpital • Propulsé par Groq (Llama 3.3 70B)</p>
 </div>
 """, unsafe_allow_html=True)

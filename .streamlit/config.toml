@@ -1,0 +1,6 @@
+[server]
+# Empêcher Streamlit de surveiller ces dossiers
+folderWatchBlacklist = ['chroma_db', '.venv', '__pycache__', 'backend', 'documents']
+
+[client]
+showErrorDetails = true

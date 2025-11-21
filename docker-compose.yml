@@ -1,0 +1,64 @@
+# ==================================================
+# 🐳 Docker Compose - IT Support Chatbot
+# Pour développement et tests locaux
+# ==================================================
+
+version: '3.8'
+
+services:
+  # ===== Backend FastAPI =====
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatbot-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GROQ_MODEL=${GROQ_MODEL:-llama-3.3-70b-versatile}
+      - DOCUMENTS_DIR=/app/documents
+    volumes:
+      # Montage du code pour hot-reload en dev
+      - ./backend:/app/backend
+      - ./documents:/app/documents
+      - ./chroma_db:/app/chroma_db
+      - ./logs:/app/logs
+    command: uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+
+  # ===== Frontend Streamlit =====
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatbot-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - ENVIRONMENT=development
+    volumes:
+      - ./interface-streamlit.py:/app/interface-streamlit.py
+    command: streamlit run interface-streamlit.py --server.port 8501 --server.address 0.0.0.0
+    depends_on:
+      - backend
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+
+networks:
+  chatbot-network:
+    driver: bridge
+
+volumes:
+  chroma_db:
+  logs:

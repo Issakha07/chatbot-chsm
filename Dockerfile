@@ -1,0 +1,79 @@
+# ==================================================
+# 🐳 Dockerfile Multi-Stage pour Chatbot IT Support
+# Optimisé pour production (taille réduite + sécurité)
+# ==================================================
+
+# ============ STAGE 1: Builder ============
+FROM python:3.11-slim as builder
+
+# Métadonnées
+LABEL maintainer="IT Support Team"
+LABEL description="Healthcare IT Support Chatbot - Backend + Frontend"
+
+# Variables d'environnement pour Python
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Installer dépendances système nécessaires
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Créer répertoire de travail
+WORKDIR /app
+
+# Copier requirements
+COPY requirements.txt .
+
+# Installer dépendances Python dans un environnement virtuel
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install -r requirements.txt
+
+# ============ STAGE 2: Runtime ============
+FROM python:3.11-slim
+
+# Variables d'environnement
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    ENVIRONMENT=production
+
+# Créer utilisateur non-root pour sécurité
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Installer dépendances runtime minimales
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Créer structure de répertoires
+WORKDIR /app
+RUN mkdir -p /app/backend /app/documents /app/chroma_db /app/logs && \
+    chown -R appuser:appuser /app
+
+# Copier environnement virtuel depuis builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Copier code source
+COPY --chown=appuser:appuser backend/ ./backend/
+COPY --chown=appuser:appuser interface-streamlit.py .
+COPY --chown=appuser:appuser documents/ ./documents/
+COPY --chown=appuser:appuser .env.example .env
+
+# Exposer ports
+EXPOSE 8000 8501
+
+# Changer vers utilisateur non-root
+USER appuser
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/api/health || exit 1
+
+# Script de démarrage (backend + frontend)
+CMD ["sh", "-c", "cd /app/backend && uvicorn app:app --host 0.0.0.0 --port 8000 & streamlit run /app/interface-streamlit.py --server.port 8501 --server.address 0.0.0.0"]

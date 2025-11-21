@@ -1,0 +1,90 @@
+# ==================================================
+# 🐳 .dockerignore - Exclure fichiers inutiles
+# Optimise la taille de l'image Docker
+# ==================================================
+
+# Fichiers sensibles
+.env
+.env.local
+*.key
+*.pem
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environnements virtuels
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+chatbot.log
+
+# Base de données ChromaDB locale (sera recréée)
+chroma_db/
+
+# Cache
+.cache/
+.pytest_cache/
+.mypy_cache/
+.tox/
+
+# Documentation (optionnel)
+*.md
+!README.md
+
+# Tests
+tests/
+test_*.py
+*_test.py
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+azure-pipelines.yml
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Streamlit cache
+.streamlit/
+
+# Fichiers temporaires
+*.tmp
+*.temp
+*.bak
+*.swp
+~*
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Jupyter
+*.ipynb
+.ipynb_checkpoints/
