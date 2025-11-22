@@ -23,8 +23,10 @@ st.set_page_config(
 # ==========================================
 # 🔧 CONFIGURATION API
 # ==========================================
-API_URL = "http://localhost:8000/api/chat"
-API_RESET_URL = "http://localhost:8000/api/reset"
+import os
+BACKEND_HOST = os.getenv("BACKEND_HOST", "localhost")
+API_URL = f"http://{BACKEND_HOST}:8000/api/chat"
+API_RESET_URL = f"http://{BACKEND_HOST}:8000/api/reset"
 API_TIMEOUT = 30
 
 # ==========================================

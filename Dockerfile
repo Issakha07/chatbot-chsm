@@ -28,11 +28,17 @@ WORKDIR /app
 # Copier requirements
 COPY requirements.txt .
 
+# Cela installe la version légère (~150Mo) au lieu de la version lourde (~900Mo)
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+# --------------------------
+
+
 # Installer dépendances Python dans un environnement virtuel
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install -r requirements.txt
+RUN pip install --upgrade pip setuptools wheel
+
+RUN pip install -r requirements.txt
 
 # ============ STAGE 2: Runtime ============
 FROM python:3.11-slim
@@ -53,8 +59,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Créer structure de répertoires
 WORKDIR /app
-RUN mkdir -p /app/backend /app/documents /app/chroma_db /app/logs && \
-    chown -R appuser:appuser /app
+RUN mkdir -p /app/backend /app/documents /app/chroma_db /app/logs /home/appuser/.cache && \
+    chown -R appuser:appuser /app /home/appuser
+
+# Variables d'environnement pour le cache
+ENV HF_HOME=/home/appuser/.cache/huggingface \
+    SENTENCE_TRANSFORMERS_HOME=/home/appuser/.cache/sentence-transformers \
+    TRANSFORMERS_CACHE=/home/appuser/.cache/huggingface
 
 # Copier environnement virtuel depuis builder
 COPY --from=builder /opt/venv /opt/venv

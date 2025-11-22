@@ -3,8 +3,6 @@
 # Pour développement et tests locaux
 # ==================================================
 
-version: '3.8'
-
 services:
   # ===== Backend FastAPI =====
   backend:
@@ -46,6 +44,7 @@ services:
       - "8501:8501"
     environment:
       - ENVIRONMENT=development
+      - BACKEND_HOST=chatbot-backend
     volumes:
       - ./interface-streamlit.py:/app/interface-streamlit.py
     command: streamlit run interface-streamlit.py --server.port 8501 --server.address 0.0.0.0

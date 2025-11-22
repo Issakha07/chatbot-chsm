@@ -26,7 +26,10 @@ from sentence_transformers import SentenceTransformer
 from groq import Groq
 
 # Import du processeur de documents universel
-from document_processor import DocumentProcessor, chunk_text
+try:
+    from .document_processor import DocumentProcessor, chunk_text
+except ImportError:
+    from document_processor import DocumentProcessor, chunk_text
 
 # Configuration langdetect
 DetectorFactory.seed = 0
