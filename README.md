@@ -185,3 +185,67 @@ Le système:
 ---
 
 **Développé avec ❤️ pour l'hôpital**
+
+
+
+# ----------------------------------------------------
+# ---------------------README_SPACES------------------
+
+---
+title: Chatbot IT Support CHSM
+emoji: 🏥
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+license: mit
+app_port: 8501
+---
+
+# 🏥 Chatbot IT Support - Hôpital CHSM
+
+Chatbot intelligent pour le support IT hospitalier, utilisant Groq AI et RAG (Retrieval-Augmented Generation) pour répondre aux questions basées sur la documentation technique.
+
+## 🚀 Fonctionnalités
+
+- ✅ Réponses basées sur la documentation PDF
+- ✅ Détection automatique de la langue (FR/EN)
+- ✅ Interface utilisateur intuitive avec Streamlit
+- ✅ Powered by Groq (llama-3.3-70b-versatile)
+- ✅ RAG avec ChromaDB et Sentence Transformers
+
+# ----------------------------------------------------
+# ---------------------README_HuggingFace------------------
+
+# 🏥 Chatbot IT Support - Hôpital CHSM
+
+Chatbot intelligent pour le support IT hospitalier, utilisant Groq AI et RAG (Retrieval-Augmented Generation) pour répondre aux questions basées sur la documentation technique.
+
+## 🚀 Fonctionnalités
+
+- ✅ Réponses basées sur la documentation PDF
+- ✅ Détection automatique de la langue (FR/EN)
+- ✅ Interface utilisateur intuitive
+- ✅ Powered by Groq (llama-3.3-70b-versatile)
+
+## 🔧 Configuration requise
+
+Ajoutez votre clé API Groq dans les **Settings > Repository Secrets**:
+- `GROQ_API_KEY`: Votre clé API Groq (obtenir sur https://console.groq.com/keys)
+
+## 📚 Documents indexés
+
+- Procédures de demandes de service IT
+- Guides techniques
+- Documentation support
+
+## 🏗️ Architecture
+
+- **Backend**: FastAPI + ChromaDB + Sentence Transformers
+- **Frontend**: Streamlit
+- **LLM**: Groq API (llama-3.3-70b-versatile)
+- **Embeddings**: all-MiniLM-L6-v2
+
+## 👨‍💻 Développé par
+
+Équipe IT - Hôpital CHSM
