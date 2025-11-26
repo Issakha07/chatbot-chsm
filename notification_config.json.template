@@ -1,0 +1,27 @@
+{
+  "email": {
+    "enabled": true,
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "sender_email": "votre-email@gmail.com",
+    "sender_password": "votre-mot-de-passe-application",
+    "recipients": [
+      "destinataire1@example.com",
+      "destinataire2@example.com"
+    ]
+  },
+  "teams": {
+    "enabled": false,
+    "webhook_url": "https://outlook.office.com/webhook/VOTRE-WEBHOOK-URL"
+  },
+  "alert_levels": {
+    "critical": [
+      "email",
+      "teams"
+    ],
+    "warning": [
+      "teams"
+    ],
+    "ok": []
+  }
+}

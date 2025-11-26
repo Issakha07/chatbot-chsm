@@ -1,11 +1,13 @@
 # ==================================================
-# 🚀 Dockerfile pour Hugging Face Spaces
+# 🚀 Dockerfile pour Chatbot CHSM
 # ==================================================
-# Ce fichier est optimisé pour le déploiement sur Hugging Face Spaces.
-# Pour le développement local avec Docker Compose, utilisez Dockerfile.local
+# Chatbot de support IT pour l'hôpital CHSM
+# Backend: FastAPI + Groq LLM
+# Frontend: Streamlit
+# Base de données vectorielle: ChromaDB
 # ==================================================
 
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # Variables d'environnement
 ENV PYTHONUNBUFFERED=1 \
@@ -19,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Créer répertoires
 WORKDIR /app
-RUN mkdir -p /app/backend /app/documents /app/chroma_db
+RUN mkdir -p /app/backend /app/documents /app/chroma_db /app/logs
 
 # Copier requirements et installer
 COPY requirements.txt .
@@ -29,11 +31,14 @@ RUN pip install --upgrade pip && \
 # Copier le code
 COPY backend/ ./backend/
 COPY interface-streamlit.py .
-COPY documents/ ./documents/
+COPY .streamlit/ ./.streamlit/
 
-# Exposer le port Streamlit
-EXPOSE 8501
+# Exposer les ports
+# 8000: FastAPI Backend
+# 8501: Streamlit Frontend
+EXPOSE 8000 8501
 
-# Script de démarrage combiné
+# Script de démarrage
+# Lance FastAPI en arrière-plan et Streamlit en avant-plan
 CMD uvicorn backend.app:app --host 0.0.0.0 --port 8000 & \
     streamlit run interface-streamlit.py --server.port 8501 --server.address 0.0.0.0 --server.headless true

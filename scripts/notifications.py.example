@@ -1,0 +1,267 @@
+"""
+Module de notifications pour les alertes du chatbot
+Supporte: Email (SMTP), Microsoft Teams (Webhook)
+"""
+
+import json
+import logging
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, List
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import requests
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class NotificationManager:
+    """Gestionnaire de notifications multi-canal"""
+    
+    def __init__(self, config_file: str = "notification_config.json"):
+        self.config_file = Path(config_file)
+        self.config = self.load_config()
+    
+    def load_config(self) -> Dict:
+        """Charger la configuration des notifications"""
+        if not self.config_file.exists():
+            # Configuration par defaut
+            default_config = {
+                "email": {
+                    "enabled": True,
+                    "smtp_server": "smtp.gmail.com",
+                    "smtp_port": 587,
+                    "sender_email": "votre-email@gmail.com",
+                    "sender_password": "VOTRE_MOT_DE_PASSE_APPLICATION",
+                    "recipients": ["destinataire@example.com"]
+                },
+                "teams": {
+                    "enabled": False,
+                    "webhook_url": "https://outlook.office.com/webhook/VOTRE_WEBHOOK_URL"
+                },
+                "alert_levels": {
+                    "critical": ["email", "teams"],
+                    "warning": ["teams"],
+                    "ok": []
+                }
+            }
+            
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(default_config, f, indent=2, ensure_ascii=False)
+            
+            logger.warning(f"Configuration par defaut creee: {self.config_file}")
+            logger.warning("IMPORTANT: Editez ce fichier avec vos vraies informations!")
+            return default_config
+        
+        with open(self.config_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    
+    def send_email(self, subject: str, body: str, html_body: str = None) -> bool:
+        """Envoyer un email via SMTP"""
+        if not self.config['email']['enabled']:
+            logger.info("Email desactive dans la configuration")
+            return False
+        
+        try:
+            # Preparer le message
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = subject
+            msg['From'] = self.config['email']['sender_email']
+            msg['To'] = ', '.join(self.config['email']['recipients'])
+            
+            # Ajouter le corps texte
+            msg.attach(MIMEText(body, 'plain', 'utf-8'))
+            
+            # Ajouter le corps HTML si fourni
+            if html_body:
+                msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+            
+            # Connexion au serveur SMTP
+            server = smtplib.SMTP(
+                self.config['email']['smtp_server'],
+                self.config['email']['smtp_port']
+            )
+            server.starttls()
+            server.login(
+                self.config['email']['sender_email'],
+                self.config['email']['sender_password']
+            )
+            
+            # Envoyer l'email
+            server.send_message(msg)
+            server.quit()
+            
+            logger.info(f"Email envoye: {subject}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Erreur envoi email: {e}")
+            return False
+    
+    def send_teams_message(self, title: str, message: str, color: str = "0078D7") -> bool:
+        """Envoyer un message sur Microsoft Teams via Webhook"""
+        if not self.config['teams']['enabled']:
+            logger.info("Teams desactive dans la configuration")
+            return False
+        
+        try:
+            # Format MessageCard pour Teams
+            card = {
+                "@type": "MessageCard",
+                "@context": "https://schema.org/extensions",
+                "summary": title,
+                "themeColor": color,
+                "title": title,
+                "sections": [{
+                    "activityTitle": "Chatbot CHSM - Monitoring",
+                    "activitySubtitle": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "text": message,
+                    "markdown": True
+                }]
+            }
+            
+            # Envoyer le webhook
+            response = requests.post(
+                self.config['teams']['webhook_url'],
+                json=card,
+                headers={'Content-Type': 'application/json'}
+            )
+            
+            if response.status_code == 200:
+                logger.info(f"Message Teams envoye: {title}")
+                return True
+            else:
+                logger.error(f"Erreur Teams: {response.status_code} - {response.text}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Erreur envoi Teams: {e}")
+            return False
+    
+    def notify_quality_alert(self, report: Dict) -> bool:
+        """Notifier une alerte qualite"""
+        status = report.get('overall_status', 'unknown')
+        channels = self.config['alert_levels'].get(status, [])
+        
+        if not channels:
+            logger.info(f"Pas de notification pour le statut: {status}")
+            return True
+        
+        # Preparer le message
+        title = f"[{status.upper()}] Alerte Qualite Chatbot"
+        
+        # Message texte
+        text_body = f"""
+Rapport d'Alerte Qualite - {datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+Statut: {status.upper()}
+Periode: {report.get('period_days', 1)} jour(s)
+Total conversations: {report.get('total_conversations', 0)}
+
+ALERTES:
+"""
+        for alert in report.get('alerts', []):
+            text_body += f"- [{alert['status'].upper()}] {alert['message']}\n"
+        
+        if report.get('anomalies'):
+            text_body += "\nANOMALIES DETECTEES:\n"
+            for anomaly in report['anomalies']:
+                text_body += f"- {anomaly['message']}\n"
+        
+        # Couleur selon statut
+        colors = {
+            'critical': 'FF0000',  # Rouge
+            'warning': 'FFA500',   # Orange
+            'ok': '00FF00'         # Vert
+        }
+        color = colors.get(status, '0078D7')
+        
+        # Envoyer sur les canaux configures
+        results = []
+        
+        if 'email' in channels:
+            results.append(self.send_email(
+                subject=title,
+                body=text_body
+            ))
+        
+        if 'teams' in channels:
+            results.append(self.send_teams_message(
+                title=title,
+                message=text_body,
+                color=color
+            ))
+        
+        # Retourne True si au moins un canal a reussi
+        return any(results) if results else True
+    
+    def notify_report_generated(self, report_path: str, stats: Dict) -> bool:
+        """Notifier qu'un rapport a ete genere"""
+        title = "Rapport Evidently Genere"
+        
+        message = f"""
+Nouveau rapport de monitoring genere!
+
+Fichier: {report_path}
+Conversations analysees: {stats.get('total_conversations', 0)}
+Confiance moyenne: {stats.get('avg_confidence', 0):.1%}
+Temps de reponse moyen: {stats.get('avg_response_time', 0):.2f}s
+
+Le rapport complet est disponible sur le serveur.
+"""
+        
+        # Envoyer sur Teams uniquement (pas besoin d'email pour les rapports OK)
+        if self.config['teams']['enabled']:
+            return self.send_teams_message(
+                title=title,
+                message=message,
+                color='00FF00'  # Vert
+            )
+        
+        return True
+
+
+def test_notifications():
+    """Tester les notifications"""
+    notif = NotificationManager()
+    
+    print("\n=== TEST DES NOTIFICATIONS ===\n")
+    
+    # Test email
+    print("Test Email...")
+    notif.send_email(
+        subject="Test - Notification Chatbot",
+        body="Ceci est un email de test du systeme de notification."
+    )
+    
+    # Test Teams
+    print("\nTest Microsoft Teams...")
+    notif.send_teams_message(
+        title="Test - Notification Chatbot",
+        message="Ceci est un message de test sur Microsoft Teams.",
+        color="0078D7"
+    )
+    
+    # Test alerte critique
+    print("\nTest Alerte Critique...")
+    test_report = {
+        'overall_status': 'critical',
+        'period_days': 1,
+        'total_conversations': 15,
+        'alerts': [
+            {
+                'status': 'critical',
+                'message': 'Confiance moyenne (65%) sous le seuil (70%)'
+            }
+        ],
+        'anomalies': []
+    }
+    notif.notify_quality_alert(test_report)
+    
+    print("\nTests termines! Verifiez vos emails et Teams.")
+
+
+if __name__ == "__main__":
+    test_notifications()
