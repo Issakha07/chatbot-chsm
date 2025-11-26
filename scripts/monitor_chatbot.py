@@ -6,14 +6,18 @@ Surveille les questions, réponses et détecte les drifts
 import sys
 from pathlib import Path
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
-from evidently import ColumnMapping
-from evidently.report import Report
-from evidently.metric_preset import DataDriftPreset, TextOverviewPreset
-from evidently.metrics import *
+import logging
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Configuration logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 class ChatbotMonitor:
     """Monitoring du chatbot avec Evidently"""
@@ -25,188 +29,346 @@ class ChatbotMonitor:
         self.reports_dir.mkdir(exist_ok=True)
     
     def load_conversations(self, days: int = 7) -> pd.DataFrame:
-        """Charger les conversations des N derniers jours"""
-        # Pour l'instant, retourne des données de test
-        # À remplacer par votre vrai système de logs
+        """Charger les conversations des fichiers JSONL"""
+        conversations = []
         
-        # Exemple de données
-        data = {
-            "timestamp": [
-                "2024-11-20 10:30:00", "2024-11-20 11:15:00",
-                "2024-11-21 09:00:00", "2024-11-21 14:30:00",
-                "2024-11-22 08:45:00"
-            ],
-            "question": [
-                "Comment réinitialiser mon mot de passe?",
-                "Procédure pour demander un nouveau PC",
-                "Créer un ticket de support",
-                "Accès VPN à distance",
-                "Installation imprimante réseau"
-            ],
-            "answer": [
-                "Pour réinitialiser votre mot de passe...",
-                "La procédure de demande de matériel...",
-                "Vous pouvez créer un ticket via...",
-                "L'accès VPN nécessite...",
-                "L'installation d'imprimante se fait..."
-            ],
-            "response_time": [1.2, 1.5, 0.9, 1.8, 1.1],
-            "has_answer": [True, True, True, True, True],
-            "confidence": [0.92, 0.87, 0.95, 0.83, 0.89]
-        }
+        # Lister tous les fichiers de logs
+        log_files = sorted(self.logs_dir.glob("chat_*.jsonl"))
         
-        df = pd.DataFrame(data)
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        if not log_files:
+            logger.warning("⚠️  Aucun fichier de logs trouvé")
+            return pd.DataFrame()
+        
+        logger.info(f"📂 Chargement de {len(log_files)} fichier(s) de logs...")
+        
+        # Charger chaque fichier JSONL
+        for log_file in log_files:
+            try:
+                with open(log_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.strip():
+                            conv = json.loads(line)
+                            conversations.append(conv)
+            except Exception as e:
+                logger.error(f"❌ Erreur lecture {log_file.name}: {e}")
+        
+        if not conversations:
+            logger.warning("⚠️  Aucune conversation trouvée dans les logs")
+            return pd.DataFrame()
+        
+        df = pd.DataFrame(conversations)
+        logger.info(f"✅ {len(df)} conversations chargées")
+        
         return df
     
-    def split_reference_current(self, df: pd.DataFrame, split_date: str = None):
-        """Séparer les données de référence et actuelles"""
-        if split_date is None:
-            # Par défaut, 70% référence, 30% actuel
-            split_idx = int(len(df) * 0.7)
-            reference = df.iloc[:split_idx]
-            current = df.iloc[split_idx:]
-        else:
-            split_datetime = pd.to_datetime(split_date)
-            reference = df[df['timestamp'] < split_datetime]
-            current = df[df['timestamp'] >= split_datetime]
+    def generate_basic_stats(self, df: pd.DataFrame) -> dict:
+        """Générer des statistiques basiques"""
+        if df.empty:
+            return {}
         
-        return reference, current
+        stats = {
+            'total_conversations': len(df),
+            'avg_response_time': df['response_time'].mean() if 'response_time' in df else 0,
+            'avg_confidence': df['confidence'].mean() if 'confidence' in df else 0,
+            'languages': df['language'].value_counts().to_dict() if 'language' in df else {},
+            'date_range': {
+                'start': df['timestamp'].min() if 'timestamp' in df else None,
+                'end': df['timestamp'].max() if 'timestamp' in df else None
+            }
+        }
+        
+        return stats
     
-    def generate_data_drift_report(self, reference: pd.DataFrame, current: pd.DataFrame):
-        """Générer rapport de drift des données"""
+    def analyze_questions(self, df: pd.DataFrame) -> dict:
+        """Analyser les types de questions posées"""
+        if df.empty or 'question' not in df:
+            return {}
         
-        column_mapping = ColumnMapping(
-            text_features=["question", "answer"],
-            numerical_features=["response_time", "confidence"]
-        )
+        # Longueur moyenne des questions
+        df['question_length'] = df['question'].str.len()
         
-        report = Report(metrics=[
-            DataDriftPreset(),
-            TextOverviewPreset(column_name="question"),
-            ColumnDriftMetric(column_name="response_time"),
-            ColumnDriftMetric(column_name="confidence"),
-        ])
+        # Mots-clés fréquents (simple extraction)
+        all_words = ' '.join(df['question'].tolist()).lower()
+        keywords = {}
         
-        report.run(
-            reference_data=reference,
-            current_data=current,
-            column_mapping=column_mapping
-        )
+        # Mots-clés IT communs
+        it_keywords = [
+            'mot de passe', 'password', 'vpn', 'connexion', 'accès',
+            'logiciel', 'application', 'service', 'support', 'problème',
+            'erreur', 'installation', 'configuration', 'email', 'réseau'
+        ]
+        
+        for keyword in it_keywords:
+            count = all_words.count(keyword.lower())
+            if count > 0:
+                keywords[keyword] = count
+        
+        analysis = {
+            'total_questions': len(df),
+            'avg_question_length': df['question_length'].mean(),
+            'min_question_length': df['question_length'].min(),
+            'max_question_length': df['question_length'].max(),
+            'top_keywords': dict(sorted(keywords.items(), key=lambda x: x[1], reverse=True)[:10])
+        }
+        
+        return analysis
+    
+    def generate_html_report(self, df: pd.DataFrame) -> str:
+        """Générer un rapport HTML personnalisé"""
+        stats = self.generate_basic_stats(df)
+        questions_analysis = self.analyze_questions(df)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_path = self.reports_dir / f"chatbot_monitoring_{timestamp}.html"
+        
+        # Template HTML
+        html_content = f"""
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapport Monitoring Chatbot - {datetime.now().strftime("%Y-%m-%d %H:%M")}</title>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }}
+        h1 {{
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }}
+        h2 {{
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }}
+        .metric-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }}
+        .metric-card {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }}
+        .metric-card.green {{
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }}
+        .metric-card.orange {{
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }}
+        .metric-card.blue {{
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }}
+        .metric-value {{
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }}
+        .metric-label {{
+            font-size: 0.9em;
+            opacity: 0.9;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }}
+        th, td {{
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }}
+        th {{
+            background: #3498db;
+            color: white;
+        }}
+        tr:hover {{
+            background: #f5f5f5;
+        }}
+        .timestamp {{
+            color: #7f8c8d;
+            font-size: 0.9em;
+            margin-top: 30px;
+            text-align: center;
+        }}
+        .alert {{
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }}
+        .success {{
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Rapport de Monitoring Chatbot IT Support</h1>
+        <p class="timestamp">Généré le {datetime.now().strftime("%d/%m/%Y à %H:%M:%S")}</p>
+        
+        <div class="success">
+            <strong>✅ Statut :</strong> Système opérationnel - {stats.get('total_conversations', 0)} conversations analysées
+        </div>
+        
+        <h2>📈 Métriques Principales</h2>
+        <div class="metric-grid">
+            <div class="metric-card blue">
+                <div class="metric-label">Total Conversations</div>
+                <div class="metric-value">{stats.get('total_conversations', 0)}</div>
+            </div>
+            
+            <div class="metric-card green">
+                <div class="metric-label">Temps de Réponse Moyen</div>
+                <div class="metric-value">{stats.get('avg_response_time', 0):.2f}s</div>
+            </div>
+            
+            <div class="metric-card orange">
+                <div class="metric-label">Confiance Moyenne</div>
+                <div class="metric-value">{stats.get('avg_confidence', 0):.1%}</div>
+            </div>
+        </div>
+        
+        <h2>💬 Analyse des Questions</h2>
+        <table>
+            <tr>
+                <th>Métrique</th>
+                <th>Valeur</th>
+            </tr>
+            <tr>
+                <td>Nombre de questions</td>
+                <td>{questions_analysis.get('total_questions', 0)}</td>
+            </tr>
+            <tr>
+                <td>Longueur moyenne</td>
+                <td>{questions_analysis.get('avg_question_length', 0):.0f} caractères</td>
+            </tr>
+            <tr>
+                <td>Question la plus courte</td>
+                <td>{questions_analysis.get('min_question_length', 0)} caractères</td>
+            </tr>
+            <tr>
+                <td>Question la plus longue</td>
+                <td>{questions_analysis.get('max_question_length', 0)} caractères</td>
+            </tr>
+        </table>
+        
+        <h2>🔑 Mots-clés les Plus Fréquents</h2>
+        <table>
+            <tr>
+                <th>Mot-clé</th>
+                <th>Occurrences</th>
+            </tr>
+"""
+        
+        # Ajouter les mots-clés
+        for keyword, count in questions_analysis.get('top_keywords', {}).items():
+            html_content += f"""
+            <tr>
+                <td>{keyword}</td>
+                <td>{count}</td>
+            </tr>
+"""
+        
+        html_content += """
+        </table>
+        
+        <h2>📋 Dernières Conversations</h2>
+        <table>
+            <tr>
+                <th>Timestamp</th>
+                <th>Question</th>
+                <th>Temps (s)</th>
+                <th>Confiance</th>
+            </tr>
+"""
+        
+        # Ajouter les dernières conversations
+        for _, row in df.tail(10).iterrows():
+            html_content += f"""
+            <tr>
+                <td>{row.get('timestamp', 'N/A')}</td>
+                <td>{row.get('question', 'N/A')[:100]}...</td>
+                <td>{row.get('response_time', 0):.2f}</td>
+                <td>{row.get('confidence', 0):.1%}</td>
+            </tr>
+"""
+        
+        html_content += """
+        </table>
+        
+        <div class="alert">
+            <strong>ℹ️ Note :</strong> Ce rapport est généré automatiquement. Pour une analyse plus approfondie avec détection de drift, 
+            assurez-vous d'avoir au moins 2 périodes de données distinctes.
+        </div>
+        
+        <p class="timestamp">
+            Généré par Evidently AI Monitoring System<br>
+            Chatbot CHSM - IT Support
+        </p>
+    </div>
+</body>
+</html>
+"""
         
         # Sauvegarder le rapport
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_path = self.reports_dir / f"drift_report_{timestamp}.html"
-        report.save_html(str(report_path))
+        with open(report_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
         
-        print(f"✅ Rapport de drift sauvegardé: {report_path}")
-        return report_path
-    
-    def generate_performance_report(self, df: pd.DataFrame):
-        """Générer rapport de performance"""
-        
-        # Calculer métriques
-        metrics = {
-            "total_questions": len(df),
-            "avg_response_time": df["response_time"].mean(),
-            "avg_confidence": df["confidence"].mean(),
-            "success_rate": (df["has_answer"].sum() / len(df)) * 100,
-            "questions_per_day": df.groupby(df['timestamp'].dt.date).size().mean()
-        }
-        
-        report = Report(metrics=[
-            ColumnSummaryMetric(column_name="response_time"),
-            ColumnSummaryMetric(column_name="confidence"),
-            ColumnDistributionMetric(column_name="response_time"),
-        ])
-        
-        report.run(current_data=df, reference_data=None)
-        
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_path = self.reports_dir / f"performance_report_{timestamp}.html"
-        report.save_html(str(report_path))
-        
-        print(f"✅ Rapport de performance sauvegardé: {report_path}")
-        
-        # Sauvegarder métriques JSON
-        metrics_path = self.reports_dir / f"metrics_{timestamp}.json"
-        with open(metrics_path, 'w') as f:
-            json.dump(metrics, f, indent=2)
-        
-        print(f"""
-📊 Métriques de Performance:
-   - Questions totales: {metrics['total_questions']}
-   - Temps réponse moyen: {metrics['avg_response_time']:.2f}s
-   - Confiance moyenne: {metrics['avg_confidence']:.2%}
-   - Taux de succès: {metrics['success_rate']:.1f}%
-   - Questions/jour: {metrics['questions_per_day']:.1f}
-        """)
-        
-        return report_path, metrics
-    
-    def detect_new_topics(self, reference: pd.DataFrame, current: pd.DataFrame):
-        """Détecter les nouveaux sujets de questions"""
-        
-        # Mots-clés dans les questions de référence
-        ref_words = set()
-        for question in reference['question']:
-            ref_words.update(question.lower().split())
-        
-        # Nouveaux mots dans les questions actuelles
-        new_topics = []
-        for question in current['question']:
-            words = set(question.lower().split())
-            new_words = words - ref_words
-            if new_words:
-                new_topics.append({
-                    "question": question,
-                    "new_words": list(new_words)
-                })
-        
-        if new_topics:
-            print(f"⚠️  {len(new_topics)} nouvelles questions détectées")
-            print("💡 Suggéré: Ajouter de nouveaux documents couvrant ces sujets")
-        
-        return new_topics
-    
-    def run_full_monitoring(self):
-        """Lancer le monitoring complet"""
-        print("🔍 Démarrage du monitoring...")
-        
-        # Charger les données
-        df = self.load_conversations()
-        print(f"📊 {len(df)} conversations chargées")
-        
-        # Séparer référence/actuel
-        reference, current = self.split_reference_current(df)
-        print(f"📅 Référence: {len(reference)}, Actuel: {len(current)}")
-        
-        # Générer rapports
-        drift_report = self.generate_data_drift_report(reference, current)
-        perf_report, metrics = self.generate_performance_report(df)
-        
-        # Détecter nouveaux sujets
-        new_topics = self.detect_new_topics(reference, current)
-        
-        print(f"""
-✅ Monitoring terminé!
-   - Rapport drift: {drift_report}
-   - Rapport performance: {perf_report}
-   - Nouveaux sujets: {len(new_topics)}
-        """)
-        
-        return {
-            "drift_report": str(drift_report),
-            "performance_report": str(perf_report),
-            "metrics": metrics,
-            "new_topics": new_topics
-        }
+        logger.info(f"✅ Rapport HTML sauvegardé : {report_path}")
+        return str(report_path)
 
 
 def main():
-    """Point d'entrée du script"""
-    monitor = ChatbotMonitor()
-    monitor.run_full_monitoring()
+    """Point d'entrée principal"""
+    logger.info("🚀 Démarrage du monitoring Evidently...")
+    
+    monitor = ChatbotMonitor(logs_dir="./logs")
+    
+    # Charger les conversations
+    df = monitor.load_conversations(days=30)
+    
+    if df.empty:
+        logger.error("❌ Aucune donnée à analyser. Assurez-vous que des conversations sont loggées.")
+        return
+    
+    # Générer le rapport
+    report_path = monitor.generate_html_report(df)
+    
+    logger.info(f"""
+    ╔══════════════════════════════════════════════════════╗
+    ║         RAPPORT DE MONITORING GÉNÉRÉ                 ║
+    ╠══════════════════════════════════════════════════════╣
+    ║ Conversations analysées: {len(df):4d}                      ║
+    ║ Rapport disponible:                                  ║
+    ║ {report_path}
+    ╚══════════════════════════════════════════════════════╝
+    """)
+    
+    logger.info("\n💡 Pour visualiser le rapport, ouvrez le fichier HTML dans votre navigateur")
 
 
 if __name__ == "__main__":
