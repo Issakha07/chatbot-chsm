@@ -25,5 +25,9 @@ pdfplumber>=0.10.0  # PDF alternatif robuste
 # Détection de langue
 langdetect==1.0.9
 
+# Data Versioning & Monitoring
+dvc>=3.0.0  # Data Version Control
+evidently>=0.4.0  # ML Monitoring
+
 # Frontend Streamlit
 streamlit==1.28.2

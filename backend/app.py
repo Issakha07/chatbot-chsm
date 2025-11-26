@@ -62,6 +62,11 @@ metrics = {
 # ==========================================
 # LOGGING STRUCTURÉ
 # ==========================================
+
+# Créer dossier logs
+LOG_DIR = Path("logs")
+LOG_DIR.mkdir(exist_ok=True)
+
 class JSONFormatter(logging.Formatter):
     def format(self, record):
         log_data = {
@@ -88,6 +93,30 @@ logging.basicConfig(
     handlers=[json_handler, console_handler]
 )
 logger = logging.getLogger(__name__)
+
+# ==========================================
+# LOGGING CONVERSATIONS (POUR EVIDENTLY)
+# ==========================================
+
+def log_conversation(question: str, answer: str, response_time: float, 
+                     language: str, sources: List[str], has_answer: bool):
+    """Logger une conversation pour analyse Evidently"""
+    log_entry = {
+        "timestamp": datetime.now().isoformat(),
+        "question": question,
+        "answer": answer,
+        "response_time": response_time,
+        "language": language,
+        "sources": sources,
+        "has_answer": has_answer,
+        "confidence": 0.85 if has_answer and sources else 0.5,
+        "num_sources": len(sources)
+    }
+    
+    # Ajouter au fichier du jour (format JSONL)
+    log_file = LOG_DIR / f"chat_{datetime.now().strftime('%Y%m%d')}.jsonl"
+    with open(log_file, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
 
 # ==========================================
 # INITIALISATION FASTAPI
@@ -564,6 +593,16 @@ async def chat(request: ChatRequest, req: Request):
         duration = time.time() - start_time
         metrics['successful_requests'] += 1
         metrics['total_response_time'] += duration
+        
+        # Log pour Evidently
+        log_conversation(
+            question=question,
+            answer=answer,
+            response_time=duration,
+            language=user_lang,
+            sources=sources,
+            has_answer=len(answer) > 50 and "je n'ai pas" not in answer.lower()
+        )
         
         # Log structuré
         log_record = logger.makeRecord(
