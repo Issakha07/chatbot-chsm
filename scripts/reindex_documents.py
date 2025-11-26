@@ -30,7 +30,7 @@ class DocumentIndexer:
     def __init__(self, documents_dir: str = "./documents"):
         self.documents_dir = Path(documents_dir)
         self.metadata_file = Path(".dvc/document_metadata.json")
-        self.doc_processor = DocumentProcessor(documents_dir)
+        self.doc_processor = DocumentProcessor()
         
         # ChromaDB
         self.chroma_client = chromadb.Client()
@@ -133,10 +133,16 @@ class DocumentIndexer:
         """Indexer un document dans ChromaDB"""
         file_path = self.documents_dir / filename
         
-        # Extraire le texte
-        text = self.doc_processor.extract_text_from_pdf(file_path)
-        if not text:
-            logger.warning(f"⚠️  Pas de texte extrait de {filename}")
+        # Utiliser DocumentProcessor.extract_text()
+        result = self.doc_processor.extract_text(str(file_path))
+        
+        if not result['success']:
+            logger.warning(f"⚠️  Erreur traitement {filename}: {result.get('error', 'Inconnu')}")
+            return 0
+        
+        text = result['text']
+        if not text or len(text) < 50:
+            logger.warning(f"⚠️  Texte trop court dans {filename}")
             return 0
         
         # Découper en chunks
@@ -148,7 +154,7 @@ class DocumentIndexer:
         
         # Préparer les données
         chunk_ids = [f"{filename}_chunk_{i}" for i in range(len(chunks))]
-        metadatas = [{"source": filename} for _ in chunks]
+        metadatas = [{"source": filename, "file_type": result.get('file_type', 'unknown')} for _ in chunks]
         
         # Ajouter à ChromaDB
         self.collection.add(
