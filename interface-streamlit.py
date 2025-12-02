@@ -24,175 +24,25 @@ st.set_page_config(
 # 🔧 CONFIGURATION API
 # ==========================================
 import os
+import subprocess
+from pathlib import Path
+
 BACKEND_HOST = os.getenv("BACKEND_HOST", "localhost")
 API_URL = f"http://{BACKEND_HOST}:8000/api/chat"
 API_RESET_URL = f"http://{BACKEND_HOST}:8000/api/reset"
 API_TIMEOUT = 30
 
+# Chemins scripts
+SCRIPTS_DIR = Path(__file__).parent / "scripts"
+REINDEX_SCRIPT = SCRIPTS_DIR / "reindex_documents.py"
+MONITOR_SCRIPT = SCRIPTS_DIR / "monitor_chatbot.py"
+
 # ==========================================
 # 🎨 STYLES CSS
 # ==========================================
-st.markdown("""
-<style>
-    /* Header principal */
-    .main-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-        border-radius: 15px;
-        color: white;
-        text-align: center;
-        margin-bottom: 2rem;
-        box-shadow: 0 8px 16px rgba(0,0,0,0.1);
-    }
-    
-    .main-header h1 {
-        margin: 0;
-        font-size: 2.5rem;
-        font-weight: 700;
-    }
-    
-    .main-header p {
-        margin: 0.5rem 0 0 0;
-        font-size: 1.1rem;
-        opacity: 0.95;
-    }
-    
-    /* Messages utilisateur */
-    .user-message {
-        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-        padding: 1rem 1.5rem;
-        border-radius: 15px 15px 5px 15px;
-        margin: 0.5rem 0;
-        border-left: 4px solid #2196f3;
-        animation: slideInRight 0.3s ease-out;
-    }
-    
-    /* Messages assistant */
-    .assistant-message {
-        background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%);
-        padding: 1rem 1.5rem;
-        border-radius: 15px 15px 15px 5px;
-        margin: 0.5rem 0;
-        border-left: 4px solid #9c27b0;
-        animation: slideInLeft 0.3s ease-out;
-    }
-    
-    @keyframes slideInRight {
-        from { opacity: 0; transform: translateX(20px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-    
-    @keyframes slideInLeft {
-        from { opacity: 0; transform: translateX(-20px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-    
-    .message-header {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 0.5rem;
-        font-weight: 600;
-        font-size: 0.9rem;
-        color: #666;
-    }
-    
-    .message-content {
-        line-height: 1.7;
-        color: #333;
-    }
-    
-    /* Sources */
-    .sources-box {
-        background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
-        border-left: 4px solid #ffc107;
-        padding: 0.75rem 1rem;
-        border-radius: 8px;
-        margin-top: 0.75rem;
-        font-size: 0.85rem;
-        animation: fadeIn 0.4s ease-in;
-    }
-    
-    @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-    }
-    
-    /* Statistiques */
-    .stat-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1.5rem;
-        border-radius: 15px;
-        color: white;
-        text-align: center;
-        margin-bottom: 1rem;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-        transition: transform 0.2s;
-    }
-    
-    .stat-card:hover {
-        transform: translateY(-5px);
-    }
-    
-    .stat-value {
-        font-size: 2.5rem;
-        font-weight: 700;
-        margin: 0.5rem 0;
-    }
-    
-    .stat-label {
-        font-size: 0.95rem;
-        opacity: 0.95;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    
-    /* Boutons */
-    .stButton>button {
-        border-radius: 25px;
-        padding: 0.6rem 2rem;
-        font-weight: 600;
-        border: none;
-        transition: all 0.3s;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    .stButton>button:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 6px 12px rgba(0,0,0,0.2);
-    }
-    
-    /* Input */
-    .stTextInput>div>div>input {
-        border-radius: 25px;
-        padding: 0.75rem 1.5rem;
-        border: 2px solid #e0e0e0;
-        transition: all 0.3s;
-    }
-    
-    .stTextInput>div>div>input:focus {
-        border-color: #667eea;
-        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-    
-    /* Info boxes */
-    .info-box {
-        background: #e8f5e9;
-        border-left: 4px solid #4caf50;
-        padding: 1rem;
-        border-radius: 8px;
-        margin: 0.5rem 0;
-    }
-    
-    .warning-box {
-        background: #fff3e0;
-        border-left: 4px solid #ff9800;
-        padding: 1rem;
-        border-radius: 8px;
-        margin: 0.5rem 0;
-    }
-</style>
-""", unsafe_allow_html=True)
+# Charger les styles depuis le fichier CSS externe
+with open("style.css", "r", encoding="utf-8") as css_file:
+    st.markdown(f"<style>{css_file.read()}</style>", unsafe_allow_html=True)
 
 # ==========================================
 # 🔧 INITIALISATION SESSION
@@ -233,6 +83,73 @@ def calculate_duration() -> str:
     minutes = int(delta.total_seconds() / 60)
     seconds = int(delta.total_seconds() % 60)
     return f"{minutes}m {seconds}s"
+
+def save_uploaded_files(uploaded_files) -> tuple[bool, str, int]:
+    """Sauvegarder les fichiers uploadés dans le dossier documents"""
+    try:
+        documents_dir = Path("documents")
+        documents_dir.mkdir(exist_ok=True)
+        
+        saved_count = 0
+        for uploaded_file in uploaded_files:
+            # Vérifier l'extension
+            if not uploaded_file.name.lower().endswith('.pdf'):
+                continue
+            
+            file_path = documents_dir / uploaded_file.name
+            
+            # Sauvegarder le fichier
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            
+            saved_count += 1
+        
+        return True, f"✅ {saved_count} document(s) sauvegardé(s)", saved_count
+    except Exception as e:
+        return False, f"❌ Erreur sauvegarde: {str(e)}", 0
+
+def reindex_documents() -> tuple[bool, str]:
+    """Réindexer les documents"""
+    try:
+        result = subprocess.run(
+            ["python", str(REINDEX_SCRIPT)],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        if result.returncode == 0:
+            return True, "✅ Documents réindexés avec succès!"
+        else:
+            return False, f"❌ Erreur lors de la réindexation: {result.stderr}"
+    except subprocess.TimeoutExpired:
+        return False, "⏱️ Timeout: La réindexation a pris trop de temps"
+    except Exception as e:
+        return False, f"❌ Erreur: {str(e)}"
+
+def generate_report() -> tuple[bool, str, str]:
+    """Générer le rapport Evidently"""
+    try:
+        result = subprocess.run(
+            ["python", str(MONITOR_SCRIPT)],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        if result.returncode == 0:
+            # Trouver le fichier de rapport le plus récent
+            reports_dir = Path("reports")
+            if reports_dir.exists():
+                report_files = sorted(reports_dir.glob("chatbot_monitoring_*.html"), 
+                                    key=lambda p: p.stat().st_mtime, 
+                                    reverse=True)
+                if report_files:
+                    latest_report = report_files[0]
+                    return True, "✅ Rapport généré avec succès!", str(latest_report)
+            return True, "✅ Rapport généré!", ""
+        else:
+            return False, f"❌ Erreur génération rapport: {result.stderr}", ""
+    except Exception as e:
+        return False, f"❌ Erreur: {str(e)}", ""
 
 def send_message(question: str) -> dict:
     """Envoie message à l'API"""
@@ -363,6 +280,83 @@ with st.sidebar:
             mime="text/plain",
             use_container_width=True
         )
+    
+    st.divider()
+    
+    # Actions administratives
+    st.markdown("### ⚙️ Actions Admin")
+    
+    # Bouton 1: Upload et réindexation
+    st.markdown("**📚 Ajouter des documents**")
+    uploaded_files = st.file_uploader(
+        "Sélectionner des fichiers PDF",
+        type=['pdf'],
+        accept_multiple_files=True,
+        help="Téléchargez un ou plusieurs PDFs à ajouter à la base de connaissances",
+        label_visibility="collapsed"
+    )
+    
+    if uploaded_files:
+        st.info(f"📄 {len(uploaded_files)} fichier(s) sélectionné(s)")
+        
+        col_upload1, col_upload2 = st.columns(2)
+        
+        with col_upload1:
+            if st.button("💾 Sauvegarder", use_container_width=True):
+                with st.spinner("⏳ Sauvegarde..."):
+                    success, message, count = save_uploaded_files(uploaded_files)
+                    if success and count > 0:
+                        st.success(message)
+                    elif success and count == 0:
+                        st.warning("⚠️ Aucun fichier PDF valide")
+                    else:
+                        st.error(message)
+        
+        with col_upload2:
+            if st.button("🔄 Sauvegarder & Réindexer", use_container_width=True, type="primary"):
+                # Sauvegarder d'abord
+                with st.spinner("⏳ Sauvegarde..."):
+                    success, message, count = save_uploaded_files(uploaded_files)
+                    
+                if success and count > 0:
+                    st.success(message)
+                    # Puis réindexer
+                    with st.spinner("⏳ Réindexation en cours..."):
+                        success_reindex, message_reindex = reindex_documents()
+                        if success_reindex:
+                            st.success(message_reindex)
+                            st.balloons()
+                        else:
+                            st.error(message_reindex)
+                elif success and count == 0:
+                    st.warning("⚠️ Aucun fichier PDF valide à réindexer")
+                else:
+                    st.error(message)
+    
+    st.divider()
+    
+    # Bouton 2: Générer rapport
+    st.markdown("**📊 Rapport de performance**")
+    
+    if st.button("📈 Générer rapport actuel", use_container_width=True, help="Créer un rapport de performance avec toutes les conversations jusqu'à maintenant"):
+        with st.spinner("⏳ Génération du rapport..."):
+            success, message, report_path = generate_report()
+            if success:
+                st.success(message)
+                if report_path and Path(report_path).exists():
+                    st.info(f"📁 Rapport: `{Path(report_path).name}`")
+                    # Lien pour ouvrir le rapport
+                    with open(report_path, 'r', encoding='utf-8') as f:
+                        report_html = f.read()
+                        st.download_button(
+                            label="📥 Télécharger le rapport",
+                            data=report_html,
+                            file_name=Path(report_path).name,
+                            mime="text/html",
+                            use_container_width=True
+                        )
+            else:
+                st.error(message)
     
     st.divider()
     

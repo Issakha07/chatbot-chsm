@@ -117,6 +117,8 @@ def log_conversation(question: str, answer: str, response_time: float,
     log_file = LOG_DIR / f"chat_{datetime.now().strftime('%Y%m%d')}.jsonl"
     with open(log_file, 'a', encoding='utf-8') as f:
         f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+        f.flush()  # Forcer l'écriture immédiate sur le disque
+        os.fsync(f.fileno())  # S'assurer que l'OS écrit sur le disque
 
 # ==========================================
 # INITIALISATION FASTAPI

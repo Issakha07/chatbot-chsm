@@ -52,7 +52,7 @@ python -m venv venv
 ### 3. Activer l'environnement
 
 ```powershell
-.\venv\Scripts\Activate.ps1
+venv\Scripts\Activate.ps1
 ```
 
 ### 4. Installer les dépendances
@@ -82,14 +82,13 @@ Ce script:
 
 **Terminal 1 - Backend:**
 ```powershell
-.\venv\Scripts\Activate.ps1
-cd backend
-python app.py
+venv\Scripts\Activate.ps1
+python -m uvicorn backend.app:app --reload --port 8000
 ```
 
 **Terminal 2 - Frontend:**
 ```powershell
-.\venv\Scripts\Activate.ps1
+venv\Scripts\Activate.ps1
 streamlit run interface-streamlit.py
 ```
 
@@ -168,19 +167,41 @@ Intégrez avec Prometheus/Grafana pour :
 
 ## 📚 Gestion des documents
 
-### Ajouter des documents à la base de connaissance
+### Méthode 1: Via l'interface Streamlit (Recommandé)
+
+1. Ouvrez l'interface sur http://localhost:8501
+2. Dans la sidebar, section **⚙️ Actions Admin**
+3. Sous "📚 Ajouter des documents", cliquez sur "Parcourir"
+4. Sélectionnez un ou plusieurs PDFs depuis votre PC
+5. Cliquez sur **🔄 Sauvegarder & Réindexer**
+6. Le chatbot prend immédiatement en compte les nouveaux documents ✅
+
+### Méthode 2: Manuellement
 
 1. Placez vos fichiers dans le dossier `documents/`
    - **Formats supportés :** PDF, Word, Excel, CSV, TXT, PowerPoint, Images
    - Voir [DOCUMENT_FORMATS.md](DOCUMENT_FORMATS.md) pour détails
    
-2. Redémarrez le backend ou appelez l'endpoint de réindexation
+2. Redémarrez le backend ou cliquez sur "📚 Réindexer" dans l'interface
 
 Le système:
 - Extrait automatiquement le texte (avec tableaux et structures)
 - Crée des chunks de 500 mots avec overlap
 - Génère les embeddings avec Sentence-Transformers
 - Indexe dans ChromaDB (stocké localement dans `chroma_db/`)
+
+### Générer un rapport de performance
+
+**Via l'interface:**
+1. Dans la sidebar, section **⚙️ Actions Admin**
+2. Cliquez sur **📈 Générer rapport actuel**
+3. Le rapport inclut toutes les conversations jusqu'à l'instant présent
+4. Téléchargez le rapport HTML généré
+
+**En ligne de commande:**
+```powershell
+python scripts/monitor_chatbot.py
+```
 
 ---
 

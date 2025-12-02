@@ -9,7 +9,7 @@ Gérer les versions de vos documents et de la base vectorielle ChromaDB comme du
 ### 1. Installer DVC
 
 ```powershell
-.\venv\Scripts\Activate.ps1
+venv\Scripts\Activate.ps1
 pip install dvc dvc-gdrive  # ou dvc-s3, dvc-azure selon votre stockage
 ```
 

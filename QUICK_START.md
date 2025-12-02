@@ -1,91 +1,85 @@
 # 🚀 Démarrage Rapide
 
-## ⚠️ IMPORTANT - Configuration requise
+> **Note:** Ce guide est un résumé. Pour la documentation complète, consultez [README.md](README.md)
 
-### 1. Configurer votre clé API Groq
+## ⚠️ Configuration Initiale
 
-**Ouvrez le fichier `.env`** et remplacez la ligne :
+### 1. Clé API Groq (OBLIGATOIRE)
 
-```env
-GROQ_API_KEY=your_groq_api_key_here
-```
-
-Par votre vraie clé API Groq :
+Éditez `.env` et ajoutez votre clé :
 
 ```env
-GROQ_API_KEY=gsk_votre_clé_ici_xxxxxxxxxxxxx
+GROQ_API_KEY=gsk_votre_clé_ici
 ```
 
-**Comment obtenir une clé Groq (GRATUIT) :**
-1. Allez sur : https://console.groq.com/keys
-2. Créez un compte (si nouveau)
-3. Cliquez sur "Create API Key"
-4. Copiez la clé et collez-la dans le fichier `.env`
+**Obtenir une clé gratuite:** https://console.groq.com/keys
+
+### 2. Installation
+
+```powershell
+python -m venv venv
+venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
 ---
 
-## 🎯 Démarrer le chatbot
+## 🎯 Lancer le Chatbot
 
-### Démarrage en deux terminaux
+### Méthode Recommandée (Interface Streamlit)
 
-**Terminal 1 - Backend :**
+**Terminal 1 - Backend:**
 ```powershell
-.\venv\Scripts\Activate.ps1
-cd backend
-python app.py
+venv\Scripts\Activate.ps1
+python -m uvicorn backend.app:app --reload --port 8000
 ```
 
-**Terminal 2 - Frontend :**
+**Terminal 2 - Frontend:**
 ```powershell
-.\venv\Scripts\Activate.ps1
+venv\Scripts\Activate.ps1
 streamlit run interface-streamlit.py
 ```
 
-> **💡 Astuce :** Gardez les deux terminaux ouverts pendant l'utilisation du chatbot
+**Accès:** http://localhost:8501
 
 ---
 
-## 🌐 Accéder au chatbot
+## 📚 Ajouter des Documents
 
-Une fois démarré, ouvrez votre navigateur :
+**Depuis l'interface Streamlit:**
+1. Ouvrir la sidebar (⚙️ Actions Admin)
+2. Cliquer sur "Parcourir" sous "Ajouter des documents"
+3. Sélectionner vos PDFs
+4. Cliquer "🔄 Sauvegarder & Réindexer"
 
-**Interface utilisateur :** http://localhost:8501
-
-**API Backend :** http://localhost:8000
-
----
-
-## 📚 Ajouter vos documents
-
-1. Placez vos fichiers PDF dans le dossier `documents/`
-2. Redémarrez le backend
-3. Les documents seront automatiquement indexés
+**Manuellement:**
+1. Copier les PDFs dans `documents/`
+2. Redémarrer le backend
 
 ---
 
-## 🛑 Arrêter le chatbot
+## 📊 Générer un Rapport
 
-Appuyez sur `Ctrl + C` dans les terminaux
+**Depuis l'interface:**
+- Cliquer sur "📈 Générer rapport actuel" dans la sidebar
+- Télécharger le rapport HTML généré
 
----
-
-## ❓ Problèmes courants
-
-### "GROQ_API_KEY manquante"
-→ Vérifiez que vous avez bien modifié le fichier `.env`
-
-### "Module not found"
-→ Réactivez l'environnement virtuel : `.\venv\Scripts\Activate.ps1`
-
-### Le backend ne démarre pas
-→ Vérifiez que le port 8000 n'est pas déjà utilisé
-
-### Rien ne s'affiche dans le navigateur
-→ Vérifiez que le backend est bien démarré sur le port 8000
+**En ligne de commande:**
+```powershell
+python scripts/monitor_chatbot.py
+```
 
 ---
 
-## 📞 Support
+## 🛑 Arrêt
 
-Email : it-support@hopital.qc.ca  
-Tel : Poste 5555
+`Ctrl + C` dans les deux terminaux
+
+---
+
+## 📖 Documentation Complète
+
+- **[README.md](README.md)** - Guide complet
+- **[CONFIGURATION_COMPLETE.md](CONFIGURATION_COMPLETE.md)** - DVC, automation, monitoring
+- **[API_DOCUMENTATION.md](API_DOCUMENTATION.md)** - Documentation API
+- **[docs/](docs/)** - Guides détaillés (DVC, Evidently, etc.)
