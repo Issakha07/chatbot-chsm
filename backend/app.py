@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 from collections import defaultdict
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from dotenv import load_dotenv
@@ -24,6 +24,8 @@ import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from groq import Groq
+import secrets
+import hashlib
 
 # Import du processeur de documents universel
 try:
@@ -48,6 +50,37 @@ DOCUMENTS_DIR = os.getenv("DOCUMENTS_DIR", "../documents")
 MAX_QUESTION_LENGTH = 500
 MAX_HISTORY_SIZE = 10
 RATE_LIMIT_SECONDS = 3
+
+# ==========================================
+# 🔐 AUTHENTIFICATION API KEYS
+# ==========================================
+
+# API Keys valides (en production: à stocker en base de données)
+VALID_API_KEYS = {
+    # Format: "nom_client": "clé_api"
+    "demo_client": "sk_demo_abc123xyz789",
+    "hopital_chsm": os.getenv("API_KEY_CHSM", "sk_chsm_demo123"),
+    # Ajouter vos clients ici
+}
+
+# Système de quotas par type de clé
+QUOTA_LIMITS = {
+    "sk_demo_": 100,        # Plan démo: 100 requêtes/mois
+    "sk_starter_": 1000,    # Plan starter: 1000 requêtes/mois
+    "sk_business_": 10000,  # Plan business: 10000 requêtes/mois
+    "sk_enterprise_": 999999999,  # Plan enterprise: illimité
+}
+
+# Tracking d'usage par API Key
+usage_tracker = defaultdict(lambda: {"count": 0, "month": datetime.now().month, "requests": []})
+
+# Rate limiting par API Key (requêtes par minute)
+RATE_LIMIT_PER_MINUTE = {
+    "sk_demo_": 5,
+    "sk_starter_": 10,
+    "sk_business_": 30,
+    "sk_enterprise_": 100,
+}
 
 # Métriques
 metrics = {
@@ -97,6 +130,78 @@ logger = logging.getLogger(__name__)
 # ==========================================
 # LOGGING CONVERSATIONS (POUR EVIDENTLY)
 # ==========================================
+
+# ==========================================
+# 🔐 FONCTIONS D'AUTHENTIFICATION
+# ==========================================
+
+def verify_api_key(x_api_key: str = Header(..., description="Clé API fournie lors de l'inscription")):
+    """Vérifier la validité de la clé API"""
+    if x_api_key not in VALID_API_KEYS.values():
+        logger.warning(f"❌ Tentative d'accès avec clé invalide: {x_api_key[:10]}...")
+        raise HTTPException(
+            status_code=403, 
+            detail="API Key invalide. Contactez le support pour obtenir une clé valide."
+        )
+    return x_api_key
+
+def get_key_prefix(api_key: str) -> str:
+    """Extraire le préfixe de la clé pour identifier le plan"""
+    parts = api_key.split("_")
+    if len(parts) >= 2:
+        return f"{parts[0]}_{parts[1]}_"
+    return "sk_demo_"
+
+def check_quota(api_key: str):
+    """Vérifier si le quota mensuel n'est pas dépassé"""
+    current_month = datetime.now().month
+    current_year = datetime.now().year
+    
+    # Réinitialiser le compteur chaque mois
+    if usage_tracker[api_key]["month"] != current_month:
+        usage_tracker[api_key] = {
+            "count": 0, 
+            "month": current_month,
+            "year": current_year,
+            "requests": []
+        }
+    
+    # Trouver le quota selon le préfixe
+    prefix = get_key_prefix(api_key)
+    limit = QUOTA_LIMITS.get(prefix, 100)
+    
+    current_count = usage_tracker[api_key]["count"]
+    
+    if current_count >= limit:
+        logger.warning(f"⚠️  Quota dépassé pour {api_key[:15]}... ({current_count}/{limit})")
+        raise HTTPException(
+            status_code=429,
+            detail=f"Quota mensuel dépassé ({current_count}/{limit}). Passez à un plan supérieur ou attendez le mois prochain."
+        )
+    
+    # Incrémenter le compteur
+    usage_tracker[api_key]["count"] += 1
+    usage_tracker[api_key]["requests"].append(datetime.now().isoformat())
+    
+    logger.info(f"✅ Quota OK: {current_count + 1}/{limit} pour {api_key[:15]}...")
+
+def check_rate_limit(api_key: str):
+    """Vérifier le rate limiting (requêtes par minute)"""
+    prefix = get_key_prefix(api_key)
+    limit_per_minute = RATE_LIMIT_PER_MINUTE.get(prefix, 5)
+    
+    # Compter les requêtes de la dernière minute
+    one_minute_ago = datetime.now().timestamp() - 60
+    recent_requests = [
+        req for req in usage_tracker[api_key]["requests"]
+        if datetime.fromisoformat(req).timestamp() > one_minute_ago
+    ]
+    
+    if len(recent_requests) >= limit_per_minute:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Trop de requêtes. Limite: {limit_per_minute}/minute. Réessayez dans quelques secondes."
+        )
 
 def log_conversation(question: str, answer: str, response_time: float, 
                      language: str, sources: List[str], has_answer: bool):
@@ -530,12 +635,20 @@ async def reindex_documents():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, req: Request):
-    """Endpoint principal du chatbot"""
+async def chat(
+    request: ChatRequest, 
+    req: Request,
+    api_key: str = Depends(verify_api_key)
+):
+    """Endpoint principal du chatbot (PROTÉGÉ PAR API KEY)"""
     start_time = time.time()
     metrics['total_requests'] += 1
     
     try:
+        # Vérifier quotas et rate limiting
+        check_quota(api_key)
+        check_rate_limit(api_key)
+        
         clean_old_sessions()
         
         # Session
